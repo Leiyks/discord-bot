@@ -1,18 +1,30 @@
 import os
-import discord
 from discord.ext.commands import Bot
+from typing import List
 
-TOKEN = os.environ.get("TOKEN")
-
-client: Bot = Bot(command_prefix="!", intents=discord.Intents.all())
+import discord
 
 
-@client.event
-async def on_ready():
-    await client.load_extension("src.gambling")
+TOKEN: str = os.environ["TOKEN"]
+
+
+class Client(Bot):
+    _extensions: List[str] = ["extensions.gambling"]
+
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=discord.Intents.all())
+
+    async def setup_hook(self):
+        for extension in self._extensions:
+            await self.load_extension(extension)
+
+        async for guild in self.fetch_guilds():
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
+
+
+client = Client()
 
 
 if __name__ == "__main__":
-    if not TOKEN:
-        raise ValueError("TOKEN environment variable is not set")
-    client.run(TOKEN)
+    Client().run(TOKEN)
