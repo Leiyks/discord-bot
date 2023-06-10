@@ -1,4 +1,3 @@
-from typing import Dict
 import discord
 from discord.embeds import Embed
 from discord.ext import commands
@@ -11,9 +10,7 @@ from discord.ui import View, select, Select, Button
 from discord_bot.utils.communication import send
 from importlib import metadata
 
-from discord_bot.main import client, Client
-
-MODULE_EMOJIS: Dict[str, str] = {"Gambling": "🎲", "Help": "🫴"}
+from discord_bot.main import client, Client, MODULE_EMOJIS
 
 
 class HelpView(View):

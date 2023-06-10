@@ -1,11 +1,12 @@
 import os
 from discord.ext.commands import Bot
-from typing import List
+from typing import Dict, List
 
 import discord
 
 
 TOKEN: str = os.environ["TOKEN"]
+MODULE_EMOJIS: Dict[str, str] = {"Gambling": "🎲", "Help": "🫴"}
 
 
 class Client(Bot):
