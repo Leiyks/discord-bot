@@ -9,12 +9,14 @@ TOKEN: str = os.environ["TOKEN"]
 
 
 class Client(Bot):
-    _extensions: List[str] = ["extensions.gambling"]
+    _extensions: List[str] = ["discord_bot.extensions.gambling", "discord_bot.extensions.help"]
 
     def __init__(self):
         super().__init__(command_prefix="!", intents=discord.Intents.all())
 
     async def setup_hook(self):
+        self.remove_command("help")
+
         for extension in self._extensions:
             await self.load_extension(extension)
 
@@ -26,5 +28,9 @@ class Client(Bot):
 client = Client()
 
 
+def main():
+    client.run(TOKEN)
+
+
 if __name__ == "__main__":
-    Client().run(TOKEN)
+    main()
