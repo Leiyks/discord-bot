@@ -1,7 +1,7 @@
 import asyncio
 import os
 from datetime import timedelta
-from typing import List, Optional
+from typing import Callable, List, Optional, Tuple
 
 from discord import Color, Embed, Member, VoiceClient, VoiceState, opus
 from discord.ext.commands import Cog, Context, hybrid_command
@@ -20,7 +20,7 @@ class Music(Cog):
     Control the musics played by the bot.
     """
 
-    music_queue: List[YoutubeSource] = []
+    music_queue: List[Tuple[YoutubeSource, Context]] = []
     voice_channel: Optional[VoiceClient] = None
 
     def __init__(self, *args, **kwargs):
@@ -29,7 +29,7 @@ class Music(Cog):
 
     ### BASIC RESPONSES ###
 
-    def get_embed(self, context: Context, title: str, content: str, is_error: bool = False) -> Embed:
+    def get_embed(self, context: Context, title: str, content: str, is_error: bool = False, prefix=True) -> Embed:
         """
         Send an embed response with proper format. (asynchronous)
 
@@ -38,10 +38,11 @@ class Music(Cog):
             title (str): Command title.
             content (str): response content.
             is_error (bool): if the response is an error.
+            prefix (bool): Add prefix that mention user.
         """
         title = f"{MODULE_EMOJIS['Music']} Music - {title}"
         color: Color = Color.teal() if not is_error else Color.dark_red()
-        description: str = f"{context.author.mention} {content}"
+        description: str = f"{context.author.mention} {content}" if prefix else content
         return Embed(title=title, color=color, description=description)
 
     async def send_response(self, context: Context, title: str, content: str, is_error: bool = False):
@@ -84,6 +85,24 @@ class Music(Cog):
         )
 
         await send(context, embed=embed)
+
+    async def send_play_response(self, context: Context, song: YoutubeSource):
+        """
+        Send an embed response for the `play` command.
+
+        Args:
+            context (Context): Context of the command.
+            songs (YoutubeSource): Song playing.
+        """
+        embed: Embed = (
+            self.get_embed(context, "Play", f"`Playing` next song in queue !", prefix=False)
+            .add_field(name="Track:", inline=True, value=f"`{song.title}`")
+            .add_field(name="Requested By:", inline=True, value=context.author.mention)
+            .add_field(name="Duration:", inline=True, value=f"`{timedelta(seconds=song.duration)}`")
+            .set_thumbnail(url=song.thumbnail)
+        )
+
+        await context.channel.send(embed=embed)
 
     ### LISTENERS ###
 
@@ -168,15 +187,15 @@ class Music(Cog):
         """
         Get the next music in the queue and play it.
         """
-        assert self.voice_channel is not None
-
-        if not self.music_queue:
+        if not self.music_queue or not self.voice_channel:
             return
 
-        source: YoutubeSource = self.music_queue.pop(0)
-        self.voice_channel.play(
-            source, after=lambda e: self.play_music() if not e else print(f"Error while playing song: {e}")
-        )
+        context: Context
+        source: YoutubeSource
+        source, context = self.music_queue.pop(0)
+
+        client.loop.create_task(self.send_play_response(context, source))
+        self.voice_channel.play(source, after=lambda e: self.play_music() if not e else print(f"Error: {e}"))
 
     @hybrid_command()  # type: ignore
     async def play(self, context: Context, query: Optional[str]):
@@ -218,7 +237,7 @@ class Music(Cog):
             await self.send_response(context, "Add", "Could not find the song(s) ... Try other keywords / URLs.", True)
             return
 
-        self.music_queue.extend(songs)
+        self.music_queue.extend([(song, context) for song in songs])
         await self.send_add_response(context, songs)
 
     @hybrid_command()  # type: ignore
