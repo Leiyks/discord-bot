@@ -1,73 +1,48 @@
 import asyncio
 import os
-from typing import Any, Dict, List, Optional
+from datetime import timedelta
+from typing import List, Optional
 
-from discord import Color, Embed, FFmpegPCMAudio, Member, PCMVolumeTransformer, VoiceClient, VoiceState, opus
+from discord import Color, Embed, Member, VoiceClient, VoiceState, opus
 from discord.ext.commands import Cog, Context, hybrid_command
-from yt_dlp import YoutubeDL
 
 from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
+from discord_bot.utils.youtube import YoutubeSource
 
 OPUS_LIBRARY_PATH: str = os.environ["OPUS_LIBRARY_PATH"]
 INACTIVITY_TIMEOUT: int = 600
 INACTIVITY_WAIT_INTERVAL: int = 30
 
 
-class YoutubeSource(PCMVolumeTransformer):
-    youtube_options: Dict = {
-        "format": "best[ext=mp4]",
-        "default_search": "auto",
-        "ratelimit": 5000000,
-        "outtmpl": "/tmp/%(title)s [%(id)s].%(ext)s",
-        "ignoreerrors": True,
-        "abort_on_available_fragments": True,
-        "quiet": True,
-    }
-
-    ffmpeg_options: Dict = {
-        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 24",
-    }
-
-    youtube: YoutubeDL = YoutubeDL(youtube_options)
-
-    data: Dict
-    title: str
-    url: str
-
-    def __init__(self, source: FFmpegPCMAudio, data: Dict, volume: float = 0.5, *args, **kwargs):
-        super().__init__(source, volume, *args, **kwargs)
-        self.data = data
-        self.title = data["title"]
-        self.url = data["url"]
-
-    @classmethod
-    async def search(cls, query: str) -> List["YoutubeSource"]:
-        if not query.startswith("https://www.youtube.com/"):
-            query = f"ytsearch:{query}"
-
-        data: Any = await client.loop.run_in_executor(None, lambda: cls.youtube.extract_info(query, download=False))
-
-        if data is None:
-            return []
-
-        if query.startswith("https://www.youtube.com/playlist"):
-            data = data["entries"]
-        else:
-            data = [data["entries"][0]]
-
-        return [
-            cls(FFmpegPCMAudio(entry["url"], **cls.ffmpeg_options), data=entry) for entry in data if entry is not None
-        ]
-
-
 class Music(Cog):
+    """
+    Control the musics played by the bot.
+    """
+
     music_queue: List[YoutubeSource] = []
     voice_channel: Optional[VoiceClient] = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         opus.load_opus(OPUS_LIBRARY_PATH)
+
+    ### BASIC RESPONSES ###
+
+    def get_embed(self, context: Context, title: str, content: str, is_error: bool = False) -> Embed:
+        """
+        Send an embed response with proper format. (asynchronous)
+
+        Args:
+            context (Context): Context of the command.
+            title (str): Command title.
+            content (str): response content.
+            is_error (bool): if the response is an error.
+        """
+        title = f"{MODULE_EMOJIS['Music']} Music - {title}"
+        color: Color = Color.teal() if not is_error else Color.dark_red()
+        description: str = f"{context.author.mention} {content}"
+        return Embed(title=title, color=color, description=description)
 
     async def send_response(self, context: Context, title: str, content: str, is_error: bool = False):
         """
@@ -79,11 +54,38 @@ class Music(Cog):
             content (str): response content.
             is_error (bool): if the response is an error.
         """
-        user = context.author.mention
-        title = f"{MODULE_EMOJIS['Music']} Music - {title}"
-        color: Color = Color.teal() if not is_error else Color.dark_red()
-        embed: Embed = Embed(title=title, color=color, description=f"{user} {content}")
+        embed: Embed = self.get_embed(context, title, content, is_error)
         await send(context, embed=embed)
+
+    async def send_add_response(self, context: Context, songs: List[YoutubeSource]):
+        """
+        Send an embed response for the `add` command.
+
+        Args:
+            context (Context): Context of the command.
+            songs (List[YoutubeSource]): List of songs added.
+        """
+        track_names: str = ""
+        track_durations: str = ""
+
+        for index, song in enumerate(songs):
+            track_name: str = f"`#{index + 1}` - `{song.title}`\n"
+            if len(track_name) >= 45:
+                track_name = track_name[:41] + "...`\n"
+            track_names += track_name
+            track_durations += f"`{timedelta(seconds=song.duration)}`\n"
+
+        plurial: str = "s" if len(songs) > 1 else ""
+        embed: Embed = (
+            self.get_embed(context, "Add", f"`Added` {len(songs)} song{plurial} to the queue !")
+            .add_field(name=f"Track{plurial} Queued:", inline=True, value=track_names)
+            .add_field(name=f"Duration{plurial}:", inline=True, value=track_durations)
+            .set_thumbnail(url=songs[0].thumbnail)
+        )
+
+        await send(context, embed=embed)
+
+    ### LISTENERS ###
 
     @Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
@@ -119,7 +121,8 @@ class Music(Cog):
             if time == INACTIVITY_TIMEOUT:
                 await self.voice_channel.disconnect(force=True)
 
-    @hybrid_command()  # type: ignore
+    ### COMMANDS ###
+
     async def connect(self, context: Context):
         """
         Make the Bot join the user channel.
@@ -134,7 +137,9 @@ class Music(Cog):
 
         channel = member.voice.channel
 
-        if self.voice_channel is None or not self.voice_channel.is_connected():
+        if self.voice_channel and self.voice_channel.is_connected() and self.voice_channel.channel == channel:
+            return
+        elif self.voice_channel is None or not self.voice_channel.is_connected():
             try:
                 self.voice_channel = await member.voice.channel.connect()
             except asyncio.TimeoutError:
@@ -176,13 +181,14 @@ class Music(Cog):
     @hybrid_command()  # type: ignore
     async def play(self, context: Context, query: Optional[str]):
         """
-        Play a song or a playlist from Youtube. Can be used with keyword or URLs.
+        Play a song or a playlist, can be used with keyword and URLs.
         """
         assert context.interaction is not None
         await context.interaction.response.defer()
 
         await self.connect(context)
-        assert self.voice_channel is not None
+        if not self.voice_channel:
+            return
 
         if not query:
             if not self.voice_channel.is_playing() and self.music_queue:
@@ -192,15 +198,7 @@ class Music(Cog):
                 await self.send_response(context, "Play", "The music is already playing ...")
             return
 
-        songs: List[YoutubeSource] = await YoutubeSource.search(query)
-
-        if not songs:
-            await self.send_response(context, "Play", "Could not find the song(s) ... Try other keywords / URLs.", True)
-            return
-
-        self.music_queue.extend(songs)
-        # TODO: Add embeded response here
-        await self.send_response(context, "Play", f"`Added` {len(songs)} songs to the queue !")
+        await context.invoke(client.get_command("add"), query=query)  # type: ignore
 
         if not self.voice_channel.is_playing() and not self.voice_channel.is_paused():
             self.play_music()
@@ -208,10 +206,11 @@ class Music(Cog):
     @hybrid_command()  # type: ignore
     async def add(self, context: Context, query: str):
         """
-        Add a song or a playlist from Youtube to the queue. Can be used with keyword or URLs.
+        Add a song or a playlist to the queue, can be used with keyword and URLs.
         """
         assert context.interaction is not None
-        await context.interaction.response.defer()
+        if not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         songs: List[YoutubeSource] = await YoutubeSource.search(query)
 
@@ -220,7 +219,7 @@ class Music(Cog):
             return
 
         self.music_queue.extend(songs)
-        await self.send_response(context, "Add", f"`Added` {len(songs)} songs to the queue !")
+        await self.send_add_response(context, songs)
 
     @hybrid_command()  # type: ignore
     async def pause(self, context: Context):
@@ -254,6 +253,9 @@ class Music(Cog):
 
     @hybrid_command()  # type: ignore
     async def skip(self, context: Context):
+        """
+        Skip the current song.
+        """
         assert context.interaction is not None
         await context.interaction.response.defer()
 
@@ -266,6 +268,9 @@ class Music(Cog):
 
     @hybrid_command()  # type: ignore
     async def clear(self, context: Context):
+        """
+        Clear the music queue.
+        """
         assert context.interaction is not None
         await context.interaction.response.defer()
 

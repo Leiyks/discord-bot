@@ -10,7 +10,7 @@ from discord_bot.utils.communication import send
 
 class Gambling(Cog):
     """
-    Commands collection of gambling commands.
+    Collection of gambling commands.
     """
 
     async def send_response(self, context: Context, title: str, content: str, is_error: bool = False):
