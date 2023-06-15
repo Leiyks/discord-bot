@@ -1,16 +1,19 @@
 import os
-from discord.ext.commands import Bot
 from typing import Dict, List
 
 import discord
-
+from discord.ext.commands import Bot
 
 TOKEN: str = os.environ["TOKEN"]
-MODULE_EMOJIS: Dict[str, str] = {"Gambling": "🎲", "Help": "🫴"}
+MODULE_EMOJIS: Dict[str, str] = {"Gambling": "🎲", "Music": "🎶", "Help": "🫴"}
 
 
 class Client(Bot):
-    _extensions: List[str] = ["discord_bot.extensions.gambling", "discord_bot.extensions.help"]
+    _extensions: List[str] = [
+        "discord_bot.extensions.gambling",
+        "discord_bot.extensions.music",
+        "discord_bot.extensions.help",
+    ]
 
     def __init__(self):
         super().__init__(command_prefix="!", intents=discord.Intents.all())

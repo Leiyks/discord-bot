@@ -1,16 +1,13 @@
+from importlib import metadata
+
 import discord
+from discord import ButtonStyle, Interaction, SelectOption
 from discord.embeds import Embed
-from discord.ext import commands
-from discord.ext.commands import Context, hybrid_command
+from discord.ext.commands import Cog, Context, hybrid_command
+from discord.ui import Button, Select, View, select
 
-from importlib import metadata
-
-from discord import SelectOption, Interaction, ButtonStyle
-from discord.ui import View, select, Select, Button
+from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
-from importlib import metadata
-
-from discord_bot.main import client, Client, MODULE_EMOJIS
 
 
 class HelpView(View):
@@ -35,7 +32,7 @@ class HelpView(View):
             SelectOption(label=cog, emoji=MODULE_EMOJIS[cog], description=client.cogs[cog].__doc__)
             for cog in list(client.cogs.keys())
         ],
-    )  # type: ignore
+    )
     async def help_module(self, interaction: Interaction, select: Select):
         """Display help message for a specific module of the bot."""
         await interaction.response.defer()
@@ -53,7 +50,7 @@ class HelpView(View):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
-class Help(commands.Cog):
+class Help(Cog):
     """
     Display custom interactive help message.
     """
