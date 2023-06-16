@@ -1,7 +1,7 @@
 import asyncio
 import os
 from datetime import timedelta
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from discord import Color, Embed, Member, VoiceClient, VoiceState, opus
 from discord.ext.commands import Cog, Context, hybrid_command
@@ -9,6 +9,7 @@ from discord.ext.commands import Cog, Context, hybrid_command
 from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
 from discord_bot.utils.youtube import YoutubeSource
+from discord_bot.views.music import PlayView
 
 OPUS_LIBRARY_PATH: str = os.environ["OPUS_LIBRARY_PATH"]
 INACTIVITY_TIMEOUT: int = 600
@@ -102,7 +103,8 @@ class Music(Cog):
             .set_thumbnail(url=song.thumbnail)
         )
 
-        await context.channel.send(embed=embed)
+        view: PlayView = PlayView(self, context)
+        await context.channel.send(embed=embed, view=view)
 
     ### LISTENERS ###
 
@@ -173,8 +175,8 @@ class Music(Cog):
         """
         Disconnect the Bot from any discord channel of the server.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         if not self.voice_channel:
             await self.send_response(context, "Disconnect", "The bot is not connected to a channel ...", True)
@@ -202,8 +204,8 @@ class Music(Cog):
         """
         Play a song or a playlist, can be used with keyword and URLs.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         await self.connect(context)
         if not self.voice_channel:
@@ -227,8 +229,7 @@ class Music(Cog):
         """
         Add a song or a playlist to the queue, can be used with keyword and URLs.
         """
-        assert context.interaction is not None
-        if not context.interaction.response.is_done():
+        if context.interaction and not context.interaction.response.is_done():
             await context.interaction.response.defer()
 
         songs: List[YoutubeSource] = await YoutubeSource.search(query)
@@ -245,8 +246,8 @@ class Music(Cog):
         """
         Put the current song in pause.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         if not self.voice_channel or self.voice_channel.is_paused():
             await self.send_response(context, "Pause", "The bot is not currently playing a song ...", True)
@@ -260,8 +261,8 @@ class Music(Cog):
         """
         Resume the current song.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         if not self.voice_channel or self.voice_channel.is_playing():
             await self.send_response(context, "Resume", "The bot is currently playing a song ...", True)
@@ -275,8 +276,8 @@ class Music(Cog):
         """
         Skip the current song.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         if not self.voice_channel or not self.voice_channel.is_connected():
             await self.send_response(context, "Skip", "The bot is currently not connected ...", True)
@@ -290,8 +291,8 @@ class Music(Cog):
         """
         Clear the music queue.
         """
-        assert context.interaction is not None
-        await context.interaction.response.defer()
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
 
         if not self.voice_channel or not self.voice_channel.is_connected():
             await self.send_response(context, "Clear", "The bot is currently not connected ...", True)
