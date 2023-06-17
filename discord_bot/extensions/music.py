@@ -9,7 +9,7 @@ from discord.ext.commands import Cog, Context, hybrid_command
 from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
 from discord_bot.utils.youtube import YoutubeSource
-from discord_bot.views.music import PlayView
+from discord_bot.views.music import PlayView, QueueView
 
 OPUS_LIBRARY_PATH: str = os.environ["OPUS_LIBRARY_PATH"]
 INACTIVITY_TIMEOUT: int = 600
@@ -28,7 +28,7 @@ class Music(Cog):
         super().__init__(*args, **kwargs)
         opus.load_opus(OPUS_LIBRARY_PATH)
 
-    ### BASIC RESPONSES ###
+    ### EMBEDS ###
 
     def get_embed(self, context: Context, title: str, content: str, is_error: bool = False, prefix=True) -> Embed:
         """
@@ -45,6 +45,29 @@ class Music(Cog):
         color: Color = Color.teal() if not is_error else Color.dark_red()
         description: str = f"{context.author.mention} {content}" if prefix else content
         return Embed(title=title, color=color, description=description)
+
+    def get_songs_embed(self, context: Context, songs: List[YoutubeSource], title: str, content: str) -> Embed:
+        track_names: str = ""
+        track_durations: str = ""
+
+        for index, song in enumerate(songs):
+            track_name: str = f"`#{index + 1}` - `{song.title}`\n"
+
+            if len(track_name) >= 45:
+                track_name = f"{track_name[:41]}...`\n"
+
+            track_names += track_name
+            track_durations += f"`{timedelta(seconds=song.duration)}`\n"
+
+        plurial: str = "s" if len(self.music_queue) > 1 else ""
+        embed: Embed = (
+            self.get_embed(context, title, content)
+            .add_field(name=f"Track{plurial} Queued:", inline=True, value=track_names)
+            .add_field(name=f"Duration{plurial}:", inline=True, value=track_durations)
+        )
+        return embed
+
+    ### RESPONSE ###
 
     async def send_response(self, context: Context, title: str, content: str, is_error: bool = False):
         """
@@ -67,25 +90,22 @@ class Music(Cog):
             context (Context): Context of the command.
             songs (List[YoutubeSource]): List of songs added.
         """
-        track_names: str = ""
-        track_durations: str = ""
-
-        for index, song in enumerate(songs):
-            track_name: str = f"`#{index + 1}` - `{song.title}`\n"
-            if len(track_name) >= 45:
-                track_name = track_name[:41] + "...`\n"
-            track_names += track_name
-            track_durations += f"`{timedelta(seconds=song.duration)}`\n"
-
         plurial: str = "s" if len(songs) > 1 else ""
-        embed: Embed = (
-            self.get_embed(context, "Add", f"`Added` {len(songs)} song{plurial} to the queue !")
-            .add_field(name=f"Track{plurial} Queued:", inline=True, value=track_names)
-            .add_field(name=f"Duration{plurial}:", inline=True, value=track_durations)
-            .set_thumbnail(url=songs[0].thumbnail)
-        )
-
+        embed: Embed = self.get_songs_embed(context, songs, "Add", f"`Added` {len(songs)} song{plurial} to the queue !")
         await send(context, embed=embed)
+
+    async def send_queue_response(self, context: Context):
+        """
+        Send an embed response for the `add` command.
+
+        Args:
+            context (Context): Context of the command.
+            songs (List[YoutubeSource]): List of songs added.
+        """
+        songs: List[YoutubeSource] = [song for song, _ in self.music_queue]
+        embed: Embed = self.get_songs_embed(context, songs, "Queue", f"`Display` songs in the queue !")
+        view: QueueView = QueueView(self, context)
+        await send(context, embed=embed, view=view)
 
     async def send_play_response(self, context: Context, song: YoutubeSource):
         """
@@ -119,9 +139,11 @@ class Music(Cog):
             before (VoiceState): Member's voice state before the update.
             after (VoiceState): Member's voice state after the update.
         """
-        assert client.user is not None
+        if not client.user or member.id != client.user.id:
+            return
 
-        if member.id != client.user.id or before.channel or not after.channel:
+        if before.channel or not after.channel:
+            self.music_queue = []
             return
 
         assert after.channel.guild is not None
@@ -215,6 +237,8 @@ class Music(Cog):
             if not self.voice_channel.is_playing() and self.music_queue:
                 self.voice_channel.resume()
                 await self.send_response(context, "Play", "`Resumed` the music !")
+            elif self.music_queue:
+                await self.send_response(context, "Play", "The queue is empty ...")
             else:
                 await self.send_response(context, "Play", "The music is already playing ...")
             return
@@ -303,6 +327,24 @@ class Music(Cog):
 
         self.music_queue = []
         await self.send_response(context, "Clear", "`Cleared` the queue !")
+
+    @hybrid_command()  # type: ignore
+    async def queue(self, context: Context):
+        """
+        Display the current music queue.
+        """
+        if context.interaction and not context.interaction.response.is_done():
+            await context.interaction.response.defer()
+
+        if not self.voice_channel or not self.voice_channel.is_connected():
+            await self.send_response(context, "Queue", "The bot is currently not connected ...", True)
+            return
+
+        if not self.music_queue:
+            await self.send_response(context, "Queue", "The queue is empty ...")
+            return
+
+        await self.send_queue_response(context)
 
 
 async def setup(client: Client):
