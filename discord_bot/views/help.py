@@ -29,7 +29,13 @@ class HelpView(View):
         ],
     )
     async def help_module(self, interaction: Interaction, select: Select):
-        """Display help message for a specific module of the bot."""
+        """
+        Display help message for a specific module of the bot.
+
+        Args:
+            interaction (Interaction): The interaction of the select menu.
+            select (Select): The select object itself.
+        """
         await interaction.response.defer()
 
         value: str = select.values[0]

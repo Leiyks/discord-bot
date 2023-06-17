@@ -38,6 +38,40 @@ class YoutubeSource(PCMVolumeTransformer):
 
     @classmethod
     async def search(cls, query: str) -> List["YoutubeSource"]:
+        """
+        Search for a youtube video by returning the first 10 found options.
+
+        Args:
+            query (str): The query or URL to search for.
+
+        Returns:
+            List[YoutubeSource]: A list of YoutubeSource objects.
+        """
+        data: Any = await client.loop.run_in_executor(
+            None, lambda: cls.youtube.extract_info(f"ytsearch10:{query}", download=False)
+        )
+
+        if data is None:
+            return []
+
+        return [
+            cls(FFmpegPCMAudio(entry["url"], **cls.ffmpeg_options), data=entry)
+            for entry in data["entries"]
+            if entry is not None
+        ]
+
+    @classmethod
+    async def get_first_match(cls, query: str) -> List["YoutubeSource"]:
+        """
+        Search for a youtube video or playlist with the given query/URL.
+        Return the first match if the query is not a playlist.
+
+        Args:
+            query (str): The query or URL to search for.
+
+        Returns:
+            List[YoutubeSource]: A list of YoutubeSource objects.
+        """
         if not query.startswith("https://www.youtube.com/"):
             query = f"ytsearch:{query}"
 
