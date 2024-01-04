@@ -49,8 +49,10 @@ class PlayView(View):
 
         if self.music_cog.voice_channel.is_paused():
             await self.music_cog.resume(self.context)
+            button.label = "⏸"
         else:
             await self.music_cog.pause(self.context)
+            button.label = "▶️"
 
         await interaction.response.edit_message(view=self)
 
