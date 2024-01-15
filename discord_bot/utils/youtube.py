@@ -83,7 +83,7 @@ class YoutubeSource(PCMVolumeTransformer):
         if query.startswith("https://www.youtube.com/playlist"):
             data = data["entries"]
         else:
-            data = [data["entries"][0]]
+            data = [data]
 
         return [
             cls(FFmpegPCMAudio(entry["url"], **cls.ffmpeg_options), data=entry) for entry in data if entry is not None

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import ctypes
 from datetime import timedelta
 from typing import List, Optional, Tuple
 
@@ -11,7 +12,8 @@ from discord_bot.utils.communication import send
 from discord_bot.utils.youtube import YoutubeSource
 from discord_bot.views.music import PlayView, QueueView, SearchView
 
-OPUS_LIBRARY_PATH: str = os.environ["OPUS_LIBRARY_PATH"]
+
+OPUS_LIBRARY_PATH: str = os.environ.get("OPUS_LIBRARY_PATH", ctypes.util.find_library("opus"))
 INACTIVITY_TIMEOUT: int = 600
 INACTIVITY_WAIT_INTERVAL: int = 30
 
