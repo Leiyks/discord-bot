@@ -80,9 +80,10 @@ class YoutubeSource(PCMVolumeTransformer):
         if data is None:
             return []
 
-        if query.startswith("https://www.youtube.com/playlist"):
+        if "entries" in data:
             data = data["entries"]
-        else:
+
+        if type(data) != list:
             data = [data]
 
         return [

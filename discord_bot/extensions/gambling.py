@@ -1,17 +1,27 @@
 import random
+import names
+from datetime import time
+from typing import Optional
 
 import discord
-from discord import Color, Embed
+from discord import Color, Embed, Guild, Member
+from discord.ext import tasks
 from discord.ext.commands import Cog, Context, hybrid_command
 
-from discord_bot.main import MODULE_EMOJIS, Client
+from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
+
+MAIN_SERVER_ID: int = 472843363478142977
+TOM_ID: int = 378640664734466058
 
 
 class Gambling(Cog):
     """
     Collection of gambling commands.
     """
+
+    def __init__(self):
+        self.rename_tom.start()
 
     async def send_response(self, context: Context, title: str, content: str, is_error: bool = False):
         """
@@ -58,6 +68,18 @@ class Gambling(Cog):
         content = f"Picking a random number between `{min}` and `{max}` ...\n\n{content}"
 
         await self.send_response(context, "Random", content, min >= max)
+
+    @tasks.loop(time=time(hour=8))
+    async def rename_tom(self):
+        guild: Optional[Guild] = client.get_guild(MAIN_SERVER_ID)
+        if not guild:
+            return
+
+        member: Optional[Member] = guild.get_member(TOM_ID)
+        if not member:
+            return
+
+        await member.edit(nick=names.get_first_name(gender="male"))
 
 
 async def setup(client: Client):
