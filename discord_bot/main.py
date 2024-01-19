@@ -1,10 +1,9 @@
-import os
+import click
 from typing import Dict, List
 
 import discord
 from discord.ext.commands import Bot
 
-TOKEN: str = os.environ["TOKEN"]
 MODULE_EMOJIS: Dict[str, str] = {"Gambling": "🎲", "Music": "🎶", "Help": "🫴"}
 
 
@@ -32,8 +31,10 @@ class Client(Bot):
 client = Client()
 
 
-def main():
-    client.run(TOKEN)
+@click.command()
+@click.argument("token", type=click.STRING)
+def main(token: str):
+    client.run(token)
 
 
 if __name__ == "__main__":
