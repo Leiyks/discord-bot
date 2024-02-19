@@ -5,8 +5,7 @@ from discord.ext.commands import Context
 from discord.ui import Button, Select, View, button
 
 from discord_bot.extensions import music
-from discord_bot.main import client
-from discord_bot.utils.youtube import YoutubeSource
+from discord_bot.utils.youtube import YoutubeSourceInfo
 
 
 class PlayView(View):
@@ -82,7 +81,7 @@ class QueueView(View):
             self.music_cog = music_cog
             self.context = context
 
-            options = [SelectOption(label=song.title, emoji="🎵") for song, _ in self.music_cog.music_queue]
+            options = [SelectOption(label=song.title, emoji="🎵") for song, _ in self.music_cog.music_queue[0:20]]
             super().__init__(placeholder="Pick a track to remove !", options=options)
 
         async def callback(self, interaction: Interaction):
@@ -103,7 +102,7 @@ class QueueView(View):
                 if song[0].title in self.values:
                     self.music_cog.music_queue.remove(song)
 
-            songs: List[YoutubeSource] = [song for song, _ in self.music_cog.music_queue]
+            songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_cog.music_queue[0:20]]
             view: Optional[View] = None if not self.options else self.view
             embed: Embed
 
@@ -128,7 +127,7 @@ class SearchView(View):
         music_cog: "music.Music"
         context: Context
 
-        def __init__(self, music_cog: "music.Music", context: Context, songs: List[YoutubeSource]):
+        def __init__(self, music_cog: "music.Music", context: Context, songs: List[YoutubeSourceInfo]):
             self.music_cog = music_cog
             self.context = context
             self.songs = songs
@@ -162,6 +161,6 @@ class SearchView(View):
             embed = self.music_cog.get_embed(self.context, "Search", f"chose `{song[0].title}`.")
             await interaction.response.edit_message(embed=embed, view=None)
 
-    def __init__(self, music_cog: "music.Music", context: Context, songs: List[YoutubeSource], *args, **kwargs):
+    def __init__(self, music_cog: "music.Music", context: Context, songs: List[YoutubeSourceInfo], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_item(self.SearchSelect(music_cog, context, songs))

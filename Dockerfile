@@ -9,8 +9,8 @@ ENV PYTHONFAULTHANDLER=1 \
   POETRY_VERSION=1.7.1
 
 # System deps:
-RUN apt update \
-  && apt upgrade \
+RUN apt update -y \
+  && apt upgrade -y \
   && apt install -y libopus0 ffmpeg
 
 RUN pip install --upgrade pip \

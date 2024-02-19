@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
 from yt_dlp import YoutubeDL
@@ -6,38 +6,38 @@ from yt_dlp import YoutubeDL
 from discord_bot.main import client
 
 
-class YoutubeSource(PCMVolumeTransformer):
+class YoutubeSourceInfo:
     youtube_options: Dict = {
-        "format": "best[ext=mp4]",
         "default_search": "auto",
-        "ratelimit": 5000000,
-        "outtmpl": "/tmp/%(title)s [%(id)s].%(ext)s",
+        "format": "bestaudio*/best",
         "ignoreerrors": True,
-        "abort_on_available_fragments": True,
+        "noplaylist": True,
+        "outtmpl": "/tmp/%(title)s [%(id)s].%(ext)s",
         "quiet": True,
+        "ratelimit": 5000000,
+        "skip_download": True,
+        "writeinfojson": True,
+        "lazy_playlist": True,
     }
 
-    ffmpeg_options: Dict = {
-        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 24",
-    }
-
-    youtube: YoutubeDL = YoutubeDL(youtube_options)
+    youtube: YoutubeDL = YoutubeDL({**youtube_options, **{"extract_flat": True}})
 
     data: Dict
     title: str
     url: str
 
-    def __init__(self, source: FFmpegPCMAudio, data: Dict, volume: float = 0.5, *args, **kwargs):
-        super().__init__(source, volume, *args, **kwargs)
+    def __init__(self, data: Dict):
         self.data = data
-
         self.title = data["title"]
         self.url = data["url"]
         self.duration = data["duration"]
-        self.thumbnail = data["thumbnail"]
+        self.thumbnail = data["thumbnails"][-1]["url"]
+
+    async def prepare(self) -> Optional["YoutubeSource"]:
+        return await YoutubeSource.prepare(self.url)
 
     @classmethod
-    async def search(cls, query: str) -> List["YoutubeSource"]:
+    async def search(cls, query: str, search: bool = False) -> List["YoutubeSourceInfo"]:
         """
         Search for a youtube video by returning the first 10 found options.
 
@@ -47,32 +47,9 @@ class YoutubeSource(PCMVolumeTransformer):
         Returns:
             List[YoutubeSource]: A list of YoutubeSource objects.
         """
-        data: Any = await client.loop.run_in_executor(
-            None, lambda: cls.youtube.extract_info(f"ytsearch10:{query}", download=False)
-        )
-
-        if data is None:
-            return []
-
-        return [
-            cls(FFmpegPCMAudio(entry["url"], **cls.ffmpeg_options), data=entry)
-            for entry in data["entries"]
-            if entry is not None
-        ]
-
-    @classmethod
-    async def get_first_match(cls, query: str) -> List["YoutubeSource"]:
-        """
-        Search for a youtube video or playlist with the given query/URL.
-        Return the first match if the query is not a playlist.
-
-        Args:
-            query (str): The query or URL to search for.
-
-        Returns:
-            List[YoutubeSource]: A list of YoutubeSource objects.
-        """
-        if not query.startswith("https://www.youtube.com/"):
+        if search:
+            query = f"ytsearch10:{query}"
+        elif not query.startswith("https://www.youtube.com/"):
             query = f"ytsearch:{query}"
 
         data: Any = await client.loop.run_in_executor(None, lambda: cls.youtube.extract_info(query, download=False))
@@ -86,6 +63,38 @@ class YoutubeSource(PCMVolumeTransformer):
         if type(data) != list:
             data = [data]
 
-        return [
-            cls(FFmpegPCMAudio(entry["url"], **cls.ffmpeg_options), data=entry) for entry in data if entry is not None
-        ]
+        return [cls(data=entry) for entry in data if entry is not None]
+
+
+class YoutubeSource(PCMVolumeTransformer):
+    youtube_options: Dict = {
+        "default_search": "auto",
+        "format": "bestaudio*/best",
+        "ignoreerrors": True,
+        "noplaylist": True,
+        "outtmpl": "/tmp/%(title)s [%(id)s].%(ext)s",
+        "quiet": True,
+        "ratelimit": 5000000,
+        "skip_download": True,
+        "writeinfojson": True,
+    }
+
+    ffmpeg_options: Dict = {
+        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "options": "-vn",
+    }
+
+    youtube: YoutubeDL = YoutubeDL(youtube_options)
+
+    def __init__(self, source, volume: float = 0.5, *args, **kwargs):
+        super().__init__(source, volume, *args, **kwargs)
+
+    @classmethod
+    async def prepare(cls, url: str) -> Optional["YoutubeSource"]:
+        data: Any = await client.loop.run_in_executor(None, lambda: cls.youtube.extract_info(url, download=False))
+
+        if data is None or "url" not in data:
+            return None
+
+        source: FFmpegPCMAudio = FFmpegPCMAudio(data["url"], **cls.ffmpeg_options)
+        return cls(source)

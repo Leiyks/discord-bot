@@ -9,7 +9,7 @@ from discord.ext.commands import Cog, Context, hybrid_command
 
 from discord_bot.main import MODULE_EMOJIS, Client, client
 from discord_bot.utils.communication import send
-from discord_bot.utils.youtube import YoutubeSource
+from discord_bot.utils.youtube import YoutubeSource, YoutubeSourceInfo
 from discord_bot.views.music import PlayView, QueueView, SearchView
 
 
@@ -23,7 +23,7 @@ class Music(Cog):
     Control the musics played by the bot.
     """
 
-    music_queue: List[Tuple[YoutubeSource, Context]] = []
+    music_queue: List[Tuple[YoutubeSourceInfo, Context]] = []
     voice_channel: Optional[VoiceClient] = None
 
     def __init__(self, *args, **kwargs):
@@ -51,7 +51,9 @@ class Music(Cog):
         description: str = f"{context.author.mention} {content}" if prefix else content
         return Embed(title=title, color=color, description=description)
 
-    def get_songs_embed(self, context: Context, songs: List[YoutubeSource], title: str, content: str) -> Embed:
+    def get_songs_embed(
+        self, context: Context, songs: List[YoutubeSourceInfo], title: str, content: str, offset: int = 0
+    ) -> Embed:
         """
         Get an embed object with a description of all songs.
 
@@ -68,7 +70,8 @@ class Music(Cog):
         track_durations: str = ""
 
         for index, song in enumerate(songs):
-            track_name: str = f"`#{index + 1}` - `{song.title}`\n"
+            padding: str = " " if index + offset + 1 < 10 else ""
+            track_name: str = f"`#{index + offset + 1}`{padding} - `{song.title}`\n"
 
             if len(track_name) >= 45:
                 track_name = f"{track_name[:41]}...`\n"
@@ -77,12 +80,32 @@ class Music(Cog):
             track_durations += f"`{timedelta(seconds=song.duration)}`\n"
 
         plurial: str = "s" if len(self.music_queue) > 1 else ""
-        embed: Embed = (
-            self.get_embed(context, title, content)
-            .add_field(name=f"Track{plurial}:", inline=True, value=track_names)
-            .add_field(name=f"Duration{plurial}:", inline=True, value=track_durations)
+        embed: Embed
+
+        if not offset:
+            embed = self.get_embed(context, title if not offset else "", content if not offset else "")
+        else:
+            embed = Embed(color=Color.teal())
+        return embed.add_field(name=f"Track{plurial}:", inline=True, value=track_names).add_field(
+            name=f"Duration{plurial}:", inline=True, value=track_durations
         )
-        return embed
+
+    def get_songs_embeds(
+        self, context: Context, songs: List[YoutubeSourceInfo], title: str, content: str
+    ) -> List[Embed]:
+        """
+        Get a list of embed object with a description of all songs.
+
+        Args:
+            context (Context): Context of the command.
+            songs (List[YoutubeSource]): List of songs.
+            title (str): Command title.
+            content (str): response content.
+
+        Returns:
+            embed (Embed): Embed object.
+        """
+        return [self.get_songs_embed(context, songs[i : i + 20], title, content, i) for i in range(0, len(songs), 20)]
 
     ### RESPONSE ###
 
@@ -99,7 +122,7 @@ class Music(Cog):
         embed: Embed = self.get_embed(context, title, content, is_error)
         await send(context, embed=embed)
 
-    async def send_add_response(self, context: Context, songs: List[YoutubeSource]):
+    async def send_add_response(self, context: Context, songs: List[YoutubeSourceInfo]):
         """
         Send an embed response for the `add` command.
 
@@ -108,8 +131,10 @@ class Music(Cog):
             songs (List[YoutubeSource]): List of songs added.
         """
         plurial: str = "s" if len(songs) > 1 else ""
-        embed: Embed = self.get_songs_embed(context, songs, "Add", f"`Added` {len(songs)} song{plurial} to the queue !")
-        await send(context, embed=embed)
+        embeds: List[Embed] = self.get_songs_embeds(
+            context, songs, "Add", f"`Added` {len(songs)} song{plurial} to the queue !"
+        )
+        await send(context, embeds=embeds)
 
     async def send_queue_response(self, context: Context):
         """
@@ -119,12 +144,12 @@ class Music(Cog):
             context (Context): Context of the command.
             songs (List[YoutubeSource]): List of songs added.
         """
-        songs: List[YoutubeSource] = [song for song, _ in self.music_queue]
-        embed: Embed = self.get_songs_embed(context, songs, "Queue", f"`Display` songs in the queue !")
+        songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_queue[0:20]]
+        embeds: List[Embed] = self.get_songs_embeds(context, songs, "Queue", f"`Display` first 20 songs in the queue !")
         view: QueueView = QueueView(self, context)
-        await send(context, embed=embed, view=view)
+        await send(context, embeds=embeds, view=view)
 
-    async def send_play_response(self, context: Context, song: YoutubeSource):
+    async def send_play_response(self, context: Context, song: YoutubeSourceInfo):
         """
         Send an embed response for the `play` command.
 
@@ -143,7 +168,7 @@ class Music(Cog):
         view: PlayView = PlayView(self, context)
         await context.channel.send(embed=embed, view=view)
 
-    async def send_search_response(self, context: Context, query: str, songs: List[YoutubeSource]):
+    async def send_search_response(self, context: Context, query: str, songs: List[YoutubeSourceInfo]):
         """
         Send an embed response for the `search` command.
 
@@ -236,7 +261,7 @@ class Music(Cog):
         await self.voice_channel.disconnect()
         await self.send_response(context, "Disconnect", "`Disconnected` the bot !")
 
-    def play_music(self):
+    async def play_music(self):
         """
         Get the next music in the queue and play it.
         """
@@ -244,11 +269,21 @@ class Music(Cog):
             return
 
         context: Context
-        source: YoutubeSource
-        source, context = self.music_queue.pop(0)
+        info: YoutubeSourceInfo
+        info, context = self.music_queue.pop(0)
 
-        client.loop.create_task(self.send_play_response(context, source))
-        self.voice_channel.play(source, after=lambda e: self.play_music() if not e else print(f"Error: {e}"))
+        source: Optional[YoutubeSource] = await info.prepare()
+
+        if source:
+            client.loop.create_task(self.send_play_response(context, info))
+            self.voice_channel.play(
+                source,
+                after=lambda e: asyncio.run_coroutine_threadsafe(self.play_music(), client.loop)
+                if not e
+                else print(f"Error: {e}"),
+            )
+        else:
+            asyncio.run_coroutine_threadsafe(self.play_music(), client.loop)
 
     @hybrid_command()  # type: ignore
     async def play(self, context: Context, query: Optional[str]):
@@ -275,7 +310,7 @@ class Music(Cog):
         await context.invoke(client.get_command("add"), query=query)  # type: ignore
 
         if not self.voice_channel.is_playing() and not self.voice_channel.is_paused():
-            self.play_music()
+            asyncio.run_coroutine_threadsafe(self.play_music(), client.loop)
 
     @hybrid_command()  # type: ignore
     async def add(self, context: Context, query: str):
@@ -285,7 +320,7 @@ class Music(Cog):
         if context.interaction and not context.interaction.response.is_done():
             await context.interaction.response.defer()
 
-        songs: List[YoutubeSource] = await YoutubeSource.get_first_match(query)
+        songs: List[YoutubeSourceInfo] = await YoutubeSourceInfo.search(query)
 
         if not songs:
             await self.send_response(context, "Add", "Could not find the song(s) ... Try other keywords / URLs.", True)
@@ -302,7 +337,7 @@ class Music(Cog):
         if context.interaction and not context.interaction.response.is_done():
             await context.interaction.response.defer()
 
-        songs: List[YoutubeSource] = await YoutubeSource.search(query)
+        songs: List[YoutubeSourceInfo] = await YoutubeSourceInfo.search(query, search=True)
 
         if not songs:
             await self.send_response(context, "Search", "Could not find any song ... Try other keywords / URLs.", True)
