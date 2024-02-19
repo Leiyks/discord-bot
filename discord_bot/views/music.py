@@ -1,9 +1,12 @@
+import asyncio
 from typing import List, Optional
 
 from discord import ButtonStyle, Embed, Interaction, SelectOption
 from discord.ext.commands import Context
 from discord.ui import Button, Select, View, button
 
+
+from discord_bot.main import client
 from discord_bot.extensions import music
 from discord_bot.utils.youtube import YoutubeSourceInfo
 
@@ -81,7 +84,7 @@ class QueueView(View):
             self.music_cog = music_cog
             self.context = context
 
-            options = [SelectOption(label=song.title, emoji="🎵") for song, _ in self.music_cog.music_queue[0:20]]
+            options = [SelectOption(label=song.title, emoji="🎵") for song, _ in self.music_cog.music_queue[0:25]]
             super().__init__(placeholder="Pick a track to remove !", options=options)
 
         async def callback(self, interaction: Interaction):
@@ -102,16 +105,18 @@ class QueueView(View):
                 if song[0].title in self.values:
                     self.music_cog.music_queue.remove(song)
 
-            songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_cog.music_queue[0:20]]
+            songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_cog.music_queue]
             view: Optional[View] = None if not self.options else self.view
-            embed: Embed
+            embeds: List[Embed]
 
             if not self.options:
-                embed = self.music_cog.get_embed(self.context, "Queue", "The queue is empty ...")
+                embeds = [self.music_cog.get_embed(self.context, "Queue", "The queue is empty ...")]
             else:
-                embed = self.music_cog.get_songs_embed(self.context, songs, "Queue", f"`Display` songs in the queue !")
+                embeds = self.music_cog.get_songs_embeds(
+                    self.context, songs, "Queue", f"`Display` songs in the queue !"
+                )
 
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(embeds=embeds, view=view)
 
     def __init__(self, music: "music.Music", context: Context, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -156,7 +161,7 @@ class SearchView(View):
             assert self.music_cog.voice_channel is not None
 
             if not self.music_cog.voice_channel.is_playing() and not self.music_cog.voice_channel.is_paused():
-                self.music_cog.play_music()
+                asyncio.run_coroutine_threadsafe(self.music_cog.play_music(), client.loop)
 
             embed = self.music_cog.get_embed(self.context, "Search", f"chose `{song[0].title}`.")
             await interaction.response.edit_message(embed=embed, view=None)

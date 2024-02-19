@@ -70,8 +70,7 @@ class Music(Cog):
         track_durations: str = ""
 
         for index, song in enumerate(songs):
-            padding: str = " " if index + offset + 1 < 10 else ""
-            track_name: str = f"`#{index + offset + 1}`{padding} - `{song.title}`\n"
+            track_name: str = f"`#{index + offset + 1}` - `{song.title}`\n"
 
             if len(track_name) >= 45:
                 track_name = f"{track_name[:41]}...`\n"
@@ -105,6 +104,8 @@ class Music(Cog):
         Returns:
             embed (Embed): Embed object.
         """
+        total_duration: int = sum([song.duration for song in songs])
+        content = f"{content}\n\n**Total Duration:** `{timedelta(seconds=total_duration)}`\n"
         return [self.get_songs_embed(context, songs[i : i + 20], title, content, i) for i in range(0, len(songs), 20)]
 
     ### RESPONSE ###
@@ -144,8 +145,8 @@ class Music(Cog):
             context (Context): Context of the command.
             songs (List[YoutubeSource]): List of songs added.
         """
-        songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_queue[0:20]]
-        embeds: List[Embed] = self.get_songs_embeds(context, songs, "Queue", f"`Display` first 20 songs in the queue !")
+        songs: List[YoutubeSourceInfo] = [song for song, _ in self.music_queue]
+        embeds: List[Embed] = self.get_songs_embeds(context, songs, "Queue", f"`Display` songs in the queue !")
         view: QueueView = QueueView(self, context)
         await send(context, embeds=embeds, view=view)
 

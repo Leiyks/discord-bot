@@ -16,15 +16,11 @@ RUN apt update -y \
 RUN pip install --upgrade pip \
   && pip install "poetry==${POETRY_VERSION}"
 
-# Copy only requirements to cache them in docker layer
 WORKDIR /code
-COPY poetry.lock pyproject.toml /code/
+COPY . /code
 
 # Project initialization:
 RUN poetry config virtualenvs.create false \
   && poetry install --only main --no-interaction --no-ansi
-
-# Creating folders, and files for a project:
-COPY . /code
 
 ENTRYPOINT ["poetry", "run", "bot"]
