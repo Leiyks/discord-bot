@@ -1,6 +1,7 @@
 import asyncio
-import os
 import ctypes
+import ctypes.util
+import os
 from datetime import timedelta
 from typing import List, Optional, Tuple
 
@@ -12,8 +13,7 @@ from discord_bot.utils.communication import send
 from discord_bot.utils.youtube import YoutubeSource, YoutubeSourceInfo
 from discord_bot.views.music import PlayView, QueueView, SearchView
 
-
-OPUS_LIBRARY_PATH: str = os.environ.get("OPUS_LIBRARY_PATH", ctypes.util.find_library("opus"))
+OPUS_LIBRARY_PATH: Optional[str] = os.environ.get("OPUS_LIBRARY_PATH", ctypes.util.find_library("opus"))
 INACTIVITY_TIMEOUT: int = 600
 INACTIVITY_WAIT_INTERVAL: int = 30
 
@@ -28,7 +28,8 @@ class Music(Cog):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        opus.load_opus(OPUS_LIBRARY_PATH)
+        if OPUS_LIBRARY_PATH:
+            opus.load_opus(OPUS_LIBRARY_PATH)
 
     ### EMBEDS ###
 
