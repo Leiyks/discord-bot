@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from discord import FFmpegPCMAudio, PCMVolumeTransformer
-from yt_dlp import YoutubeDL
+from yt_dlp import YoutubeDL, utils
 
 from discord_bot.main import client
 
@@ -18,6 +18,7 @@ class YoutubeSourceInfo:
         "skip_download": True,
         "writeinfojson": True,
         "lazy_playlist": True,
+        "match_filter": utils.match_filter_func("url!*=/shorts/"),
     }
 
     youtube: YoutubeDL = YoutubeDL({**youtube_options, **{"extract_flat": True}})
@@ -77,6 +78,7 @@ class YoutubeSource(PCMVolumeTransformer):
         "ratelimit": 5000000,
         "skip_download": True,
         "writeinfojson": True,
+        "match_filter": utils.match_filter_func("url!*=/shorts/"),
     }
 
     ffmpeg_options: Dict = {
