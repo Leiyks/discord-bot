@@ -1,6 +1,6 @@
-import click
 from typing import Dict, List
 
+import click
 import discord
 from discord.ext.commands import Bot
 
